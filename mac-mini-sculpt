@@ -1,0 +1,18 @@
+Here I'm attempting to document, mostly for myself, my adventures in trying to use the Sculpt operating system (https://genode.org/download/sculpt) on my Apple Mac Mini. This is a somewhat older Mac Mini, based on the x86_64 architecture, not Apple Silicon. I've upgraded it with an NVMe drive.
+
+The main challenges to getting Sculpt usable are:
+1) Sculpt insists on loading drivers for the outdated PS2 input system - the MacMini has no PS2 or PS2 emulation, so the driver hangs the system. This is probably because PS2 relies on a fixed address or IO port or something.
+2) The out-of-the-box Sculpt "i915" graphics driver crashes. I don't know why.
+3) The MacMini has a bespoke WiFi card, which has Spotty support even under Linux. So I use a AR9271 based USB dongle.
+
+Problems 1 and 2 are solved easily by disabling the PS2 driver and overriding the i915 to use the bootloader's provided framebuffer.
+
+Problem 3 is more of a challenge, see below.
+
+Ultimately, I'd like to get networking working with no VM so I can connect from my phone and debug the display driver issue.
+
+Here's my initial mailing list post:
+Hello,
+   I am new to Genode/Sculpt and have been trying to get it working on my somewhat old Mac Mini. I eventually succeeded to make it boot, by disabling some unnecessary drivers like PS2. However, wifi doesn't work, and I would like that feature. There is an internal wifi card in the computer that doesn't work on Linux, so I bought a USB dongle that I've been using (with Linux). From looking at some of the source, it seems most of the drivers are brought in from Linux, but, I'm not sure if or how wifi usb is supported. There's a usb_net.list but I can't figure out if it includes wifi. Is this something that would be easy to add? Is bringing drivers over a pretty simple process like copying a few files or is it an extensive effort? Thanks in advance for your suggestions.
+   
+Luckily, I received very friendly replies, and thus was born the method of USB passthrough (but note early thoughts on how to actually make a driver).
