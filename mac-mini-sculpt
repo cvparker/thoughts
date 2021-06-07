@@ -12,7 +12,282 @@ Problem 3 is more of a challenge, see below.
 Ultimately, I'd like to get networking working with no VM so I can connect from my phone and debug the display driver issue.
 
 Here's my initial mailing list post:
+------------------------
 Hello,
    I am new to Genode/Sculpt and have been trying to get it working on my somewhat old Mac Mini. I eventually succeeded to make it boot, by disabling some unnecessary drivers like PS2. However, wifi doesn't work, and I would like that feature. There is an internal wifi card in the computer that doesn't work on Linux, so I bought a USB dongle that I've been using (with Linux). From looking at some of the source, it seems most of the drivers are brought in from Linux, but, I'm not sure if or how wifi usb is supported. There's a usb_net.list but I can't figure out if it includes wifi. Is this something that would be easy to add? Is bringing drivers over a pretty simple process like copying a few files or is it an extensive effort? Thanks in advance for your suggestions.
    
 Luckily, I received very friendly replies, and thus was born the method of USB passthrough (but note early thoughts on how to actually make a driver).
+
+------------------------
+Hello Colin,
+
+On Thu, Jan 23, 2020 at 10:17:26PM -0500, Colin Parker wrote:
+> Hello,
+>    I am new to Genode/Sculpt and have been trying to get it working on my
+> somewhat old Mac Mini. I eventually succeeded to make it boot, by disabling
+> some unnecessary drivers like PS2.
+
+wow, that's cool to hear.
+
+> However, wifi doesn't work, and I would
+> like that feature. There is an internal wifi card in the computer that
+> doesn't work on Linux, so I bought a USB dongle that I've been using (with
+> Linux). From looking at some of the source, it seems most of the drivers
+> are brought in from Linux, but, I'm not sure if or how wifi usb is
+> supported. There's a usb_net.list but I can't figure out if it includes
+> wifi. Is this something that would be easy to add? Is bringing drivers over
+> a pretty simple process like copying a few files or is it an extensive
+> effort? Thanks in advance for your suggestions.
+
+The wifi driver available in Genode is a port of the Intel's wifi driver
+in Linux. So, it supports Intel wifi cards only. This is due to
+the fact that most developers at Genode Labs use some Thinkpad laptop,
+which typically use Intel peripherals.
+
+The USB net driver supports a bunch of USB-Ethernet cards, but no wifi
+:-(.
+
+Coming to your question: I'm afraid it is no easy task to just add
+some other wifi driver. Depending on the kind of device, porting a
+driver from the Linux kernel can become a quite extensive work. The
+effort for the first Intel wifi driver port for instance was 3
+person-month or above, when I remember correctly. Of course, it would
+be probably easier to enable a USB-Wifi device, which uses an Intel
+chipset already supported. But I'm not aware of such a device.
+Porting a completely new wifi chipset - potentially connected via USB
+- might be easier today, because one can use the existent USB-device
+  and Intel wifi port to look at, but it is definitely much more than
+just copying a few files.
+
+Probably, my colleague Josef Söntgen will have a more professional
+assessment, because he ported the wifi driver, but I'm afraid there is
+no easy solution.
+
+Best regards
+Stefan
+-- 
+Stefan Kalkowski
+Genode labs
+
+------------------------
+Hello Colin,
+
+> On Thu, Jan 23, 2020 at 10:17:26PM -0500, Colin Parker wrote:
+> […]
+> Is bringing drivers over a pretty simple process like copying a few
+> files or is it an extensive effort? Thanks in advance for your
+> suggestions.
+
+As Stefan already pointed out, unfortunately it indeed is a more
+extensive effort.  The 'wifi_drv' component is currently pretty much
+tailored to PCIe Intel wireless devices. Apart from porting the driver
+for an USB device the USB transport connection itself must be
+implemented.
+
+Since the current driver is somewhat entangled the first step would be
+the refactoring of the current implementation, i.e., separating its
+various parts a bit into
+
+  - component frontend (basically the Nic session provding part)
+  - wireless stack (mac80211, cfg80211, …)
+  - iwlwifi driver
+
+and hide the PCIe transport portion into the iwlwifi part for now
+(although I'm not sure if that's easily achievable). The goal would be
+to make the wireless stack transport agnostic so that a USB backend can
+be easily added and the frontend, which includes WPA handling, may be
+shared by both kinds of devices. The next step is then porting a USB
+device driver and making the necessary adjustments.
+
+Yeah, it is a bit of work :-)
+
+
+Regards Josef
+
+-- 
+Josef Söntgen
+Genode Labs
+
+------------------------
+Thanks for your response.
+
+
+    Since the current driver is somewhat entangled the first step would be
+    the refactoring of the current implementation, i.e., separating its
+    various parts a bit into
+
+      - component frontend (basically the Nic session provding part)
+      - wireless stack (mac80211, cfg80211, …)
+      - iwlwifi driver
+
+    and hide the PCIe transport portion into the iwlwifi part for now
+    (although I'm not sure if that's easily achievable). The goal would be
+    to make the wireless stack transport agnostic so that a USB backend can
+    be easily added and the frontend, which includes WPA handling, may be
+    shared by both kinds of devices. The next step is then porting a USB
+    device driver and making the necessary adjustments.
+
+    Yeah, it is a bit of work :-
+
+
+That does sound like a challenge. I'm not sure it's very possible for me either because I don't have an actual Intel wifi card to check against, so refactoring the current driver would be a non-debuggable step...
+
+Another thought that came to me is whether Sculpt VMs can do USB passthrough, and then I could run a Linux VM which will have the drivers. Is that possible? Could the network connection make it's way out of the VM?
+
+Regards,
+Colin
+
+------------------------
+Hi Colin,
+
+> Another thought that came to me is whether Sculpt VMs can do USB
+> passthrough, and then I could run a Linux VM which will have the drivers.
+> Is that possible? Could the network connection make it's way out of the VM?
+
+You can use USB passthrough on Sculpt, most prominently it is used for
+writing new Sculpt images to USB sticks [1]. It should also work for other
+USB devices like NICs and wireless dongles. However, there is no way for
+a VM to provide this as a service to the outside.
+
+  [1] https://genode.org/documentation/articles/sculpt-19-07#Updating_the_USB_boot_device_from_within_VirtualBox
+
+------------------------
+I think in case of networking, you can expose the network facility of
+the guest OS, which uses the dedicated USB-Wifi card, via the virtual
+NIC provided by Virtualbox. The nic_router component in Genode should
+be able to mark the domain of your guest OS to be the uplink for other
+domains. With the corresponding routing rules within your guest Linux
+you should be able to route requests from other Genode components to
+the USB-Wifi card.
+Of course, this is a functional solution, but not a favored one with
+respect to minimal complexity ;-).
+
+Best regards
+Stefan
+
+------------------------
+Hi Stefan,
+    Thank you so much!
+
+
+    I think in case of networking, you can expose the network facility of
+    the guest OS, which uses the dedicated USB-Wifi card, via the virtual
+    NIC provided by Virtualbox. The nic_router component in Genode should
+    be able to mark the domain of your guest OS to be the uplink for other
+    domains. With the corresponding routing rules within your guest Linux
+    you should be able to route requests from other Genode components to
+    the USB-Wifi card.
+    Of course, this is a functional solution, but not a favored one with
+    respect to minimal complexity ;-).
+
+
+Indeed, I was able to get this working. I am able to write this message from within a TinyCore VM, which is connected through Sculpt to a Debian VM. It is as you say not ideal, and it takes a bit of setup, but that's partly because Debian is not configured to act as a router by default. The routing within Sculpt was not so difficult once I understood the concept that "policy" can be used in place of "uplink" and still provides network to the outside world. However, the way I made it work was to replace the /config/managed/nic_router with /config/nic_router, but it then displays only "Local" under Network in the Leitzentrale. This works for the VMs but has the side effect that the depot cannot be accessed by Sculpt. Do you know if the launcher (or whatever other part if I misunderstood) can be "fooled" into attempting to download from depot even when it thinks the connection is local?
+
+P.S. Eventually it would be good to replace Debian with a very small VM just dedicated to the WiFi driver, can the Sculpt version of vbox or seoul run headless?
+
+Regards,
+Colin
+
+------------------------
+Hi Colin,
+
+On Wed, Feb 12, 2020 at 04:28:10AM +0000, Colin Parker wrote:
+> Hi Stefan,
+>     Thank you so much!
+> 
+
+you are more than welcome ;-)
+
+> >
+> > I think in case of networking, you can expose the network facility of
+> > the guest OS, which uses the dedicated USB-Wifi card, via the virtual
+> > NIC provided by Virtualbox. The nic_router component in Genode should
+> > be able to mark the domain of your guest OS to be the uplink for other
+> > domains. With the corresponding routing rules within your guest Linux
+> > you should be able to route requests from other Genode components to
+> > the USB-Wifi card.
+> > Of course, this is a functional solution, but not a favored one with
+> > respect to minimal complexity ;-).
+> >
+> 
+> Indeed, I was able to get this working. I am able to write this message
+> from within a TinyCore VM, which is connected through Sculpt to a Debian
+> VM.
+
+That is so cool to read.
+
+> It is as you say not ideal, and it takes a bit of setup, but that's
+> partly because Debian is not configured to act as a router by default. The
+> routing within Sculpt was not so difficult once I understood the concept
+> that "policy" can be used in place of "uplink" and still provides network
+> to the outside world. However, the way I made it work was to replace the
+> /config/managed/nic_router with /config/nic_router, but it then displays
+> only "Local" under Network in the Leitzentrale. This works for the VMs but
+> has the side effect that the depot cannot be accessed by Sculpt. Do you
+> know if the launcher (or whatever other part if I misunderstood) can be
+> "fooled" into attempting to download from depot even when it thinks the
+> connection is local?
+
+Well, I'm afraid the sculpt_manager cannot be easily fooled. It parses
+the state report of the nic_router, and depending on its uplink
+configuration senses the target configuration "wifi", "wired",
+"local", and "off". The problem is more than it is a bit too rigide,
+because we did not see your use-case in the first place.
+
+I think it is ok in general to check as sculpt_manager whether the
+configured uplink domain got a valid IP address, and thereby decide
+whether networking works for the depot. I've prepared an untested
+commit, which you could test out in your scenario by rebuilding the
+sculpt_manager. Here is the commit:
+
+  https://github.com/skalk/genode/commit/1eec61843905ef85c12be08c8405f7a04741a3f7
+
+You can rebuild your sculpt image by tweaking the sculpt.run script to
+always compile and integrate the sculpt manager to incorporate the
+commit without the need to rebuild the whole package by applying this
+patch:
+
+--- PATCH START ---
+
+diff --git a/repos/gems/run/sculpt.run b/repos/gems/run/sculpt.run
+index 546a63cc39..618c3b9518 100644
+--- a/repos/gems/run/sculpt.run
++++ b/repos/gems/run/sculpt.run
+@@ -668,6 +668,7 @@ exec sh -c "tar cf [run_dir]/genode/depot_users.tar -C [genode_dir] \
+ # Create boot image
+ #
+
+-append boot_modules { }
++build { app/sculpt_manager }
++append boot_modules { sculpt_manager }
+
+ build_boot_image $boot_modules
+
+--- PATCH END ---
+
+I hope this helps.
+
+> 
+> P.S. Eventually it would be good to replace Debian with a very small VM
+> just dedicated to the WiFi driver, can the Sculpt version of vbox or seoul
+> run headless?
+
+I've never tested it, but I would expect that you can tweak the
+machine description (XML description in machine.vbox file) of your
+Virtualbox instance to not define any display. It should then do not
+open a session to the Nitpicker service (GUI service) - theoretically.
+To circumvent the opening of a window, you must tweak the existing
+vbox5-nova-sculpt package or replace it with one, which does not use
+the Nitpicker service and does not spawn a nit_fb component.
+
+But be aware, that you cannot access the VM in this case, except via
+networking. There is no UART model or similar, which uses Genode's
+Terminal service as backend in our VirtualBox port AFAIK.
+With respect to seoul I actually have no experiences at all.
+
+Best regards
+Stefan
+
+------------------------
+
+And then it worked!
