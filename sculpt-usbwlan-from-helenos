@@ -8,3 +8,15 @@ There's also a bunch of tricks to play in Sculpt to get the manager to actually 
 
 Next came the difficult part - the HW just froze after a while. So, I resorted to packet-sniffing the USB connection to determine where the differences between the ported HelenOS driver under Sculpt, and the Linux driver lay. It turned out there were a few things.
 
+1) The USB connection has a pair of bulk endpoints and a pair of interrupt endpoints. The data goes over the bulk ones, but the Linux driver keeps using the interrupt endpoints to receive confirmation of each outgoing transmission. There's some evidence that sometimes the interrupt USB endpoint fills it's queue and that halts everything. The Linux driver also polls for some statistics and periodically resets them, which I tried to emulate as well, but without that solving the problem. It also flashes the LED, but I ignored that.
+
+2) Linux uses QoS packets, whereas the ported driver did not. This was something I was able to modify (in a bit of a hacky way), and it helped, but still there were lock-ups.
+
+3) There was some bounce buffering in the ported driver - I got rid of some of it to help things go faster. This made the lock-ups more rare, but still they happen, especially under heavy load, such as downloading the Falkon brower, which has a lot of Qt components.
+
+4) Linux also negoiates for multiple packet acknowledgement, which I haven't implemented.
+
+5) Linux also does a bunch more initialization of the device than the ported driver.
+
+At the end I conclude that 4 and 5 are probably the reason for the problem, but, it will require a massive effort to copy so much of the Linux driver. Better to try the method of Stefan Kalkowski (https://genodians.org/skalk/2021-04-06-dde-linux-experiments) to port the Linux driver itself.
+
