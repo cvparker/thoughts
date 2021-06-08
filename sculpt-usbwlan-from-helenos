@@ -1,0 +1,10 @@
+I already posted some thoughts on using Sculpt OS on Mac Mini. Here is a little bit about my efforts to port the HelenOS driver (https://github.com/HelenOS/helenos) for the AR9271 USB wlan dongle from Atheros.
+
+First, without going into all the details, let me just say that there were a few challenges even getting the AR9271 to work under HelenOS itself. These involve issues that are probably specific to HelenOS, for example the XHCI driver had some bugs, there were a few other bugs outside the driver itself, etc. But I did get it working, although stress testing is not something I was able to do well - I don't know how to get tools in HelenOS that can load recent version of HTTP, so I was confined to pulling small webpages, such as from my wifi network's router.
+
+So from there, the conceptual path to porting to Sculpt was straightforward. However, HelenOS is written in C, Sculpt in C++. HelenOS also has it's own set of abstractions, and I decided I didn't want to try to emulate a HelenOS environment. But as another microkernel OS, the code for AR9271 is nicely separated from the rest of HelenOS, making the port pretty easy conceptually. The approach I opted for was to be pretty brutal to the code, however. C sructures were converted to C++ classes, and functions that logically operated on them (e.g. first argument is a struct whatever *) were added as members. A lot of that was syntax, and it took me a bit since I haven't done a lot of C++, especially the recent features (which are awesome, BTW - override keyword FTW). The code ended up hacky and has no consistent style. But it kind of worked.
+
+There's also a bunch of tricks to play in Sculpt to get the manager to actually connect the Wifi - but nothing too hard.
+
+Next came the difficult part - the HW just froze after a while. So, I resorted to packet-sniffing the USB connection to determine where the differences between the ported HelenOS driver under Sculpt, and the Linux driver lay. It turned out there were a few things.
+
